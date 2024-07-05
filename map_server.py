@@ -6,25 +6,26 @@ from shared_data import shared_data
 app = Flask(__name__)
 CORS(app)
 
-def update_position(lat, lon):
+def update_position(lat, lon, alt):
     with shared_data.lock:
-        shared_data.latitude = lat
-        shared_data.longitude = lon
+        shared_data.pos_uav.lat = lat
+        shared_data.pos_uav.lon = lon
+        shared_data.pos_uav.alt = alt
 
 def get_position():
     with shared_data.lock:
-        return shared_data.latitude, shared_data.longitude
+        return shared_data.pos_uav.lat, shared_data.pos_uav.lon
 
 def set_user_marker(lat, lon):
     with shared_data.lock:
-        shared_data.user_marker_lat = lat
-        shared_data.user_marker_lon = lon
+        shared_data.pos_marker.lat = lat
+        shared_data.pos_marker.lon = lon
         shared_data.user_marker_active = True
         print("User point:",lat,lon)
 
 def get_user_marker():
     with shared_data.lock:
-        return shared_data.user_marker_lat, shared_data.user_marker_lon, shared_data.user_marker_active
+        return shared_data.pos_marker.lat, shared_data.pos_marker.lon, shared_data.user_marker_active
 
 def remove_user_marker():
     with shared_data.lock:

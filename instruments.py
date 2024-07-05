@@ -8,7 +8,7 @@ from shared_data import shared_data
 class ArtificialHorizonIndicator(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(400, 300)
+        #self.setFixedSize(400, 300)
         self.horizon_surface = pygame.Surface((400, 300))
         self.horizon_label = QLabel(self)
         self.initUI()

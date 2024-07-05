@@ -1,14 +1,16 @@
 # main.py
 import sys
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTextEdit, QLineEdit, QSplitter, QMenuBar, QMessageBox, QDialog
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QMenuBar, QMenu, QAction, 
+                             QVBoxLayout, QHBoxLayout, QSplitter, QLabel, QWidget, 
+                             QPushButton, QTextEdit, QLineEdit, QMessageBox, QDialog)
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtCore import Qt, QTimer, pyqtSlot,  QUrl, pyqtSignal, QObject
 from shared_data import shared_data
 from connection import setup_video_stream
 from telemetry import start_data_thread
-#from map_view import MapView, update_map
 from user_input import keyPressEvent
 from instruments import ArtificialHorizonIndicator
+from settings import ConnectionDialog
 import argparse
 import threading
 import cv2
@@ -18,43 +20,44 @@ import time
 from video import ClickableLabel
 from map_server import run_flask, update_position, get_position
 
-class ConnectionDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Connection Settings')
-        self.layout = QVBoxLayout(self)
-
-        self.entry1 = QLineEdit(self)
-        self.entry1.setPlaceholderText('Enter setting 1')
-        self.layout.addWidget(self.entry1)
-
-        self.entry2 = QLineEdit(self)
-        self.entry2.setPlaceholderText('Enter setting 2')
-        self.layout.addWidget(self.entry2)
-
-        self.save_button = QPushButton('Save', self)
-        self.save_button.clicked.connect(self.save_settings)
-        self.layout.addWidget(self.save_button)
-
-    def save_settings(self):
-        setting1 = self.entry1.text()
-        setting2 = self.entry2.text()
-        print(f'Settings saved: {setting1}, {setting2}')
-        self.accept()
 
 class App(QWidget):
     def __init__(self):
         super().__init__()
-        self.initUI()
         start_data_thread(self)
         self.setup_timers()
+        self.is_video_maximized = False
+        self.left_column_splitter = None
+        self.right_column_splitter = None
+        self.video_label = None
+        self.main_splitter = None
+        self.video_container_widget = None
+        self.map_container_widget = None
+        self.flight_data_container_widget = None
+        self.terminal_container_widget = None
+
+        self.initUI()
 
     def initUI(self):
-        self.setWindowTitle('PyQt5 GUI Demo')
+        self.setWindowTitle('MinimGCS')
         self.setGeometry(100, 100, 1200, 800)
         self.setStyleSheet("background-color: lightgrey;")
 
-        # Menu bar
+        menu_bar = self.setup_menu_bar()
+
+        self.main_splitter = QSplitter(Qt.Horizontal, self)
+        self.main_splitter.setStyleSheet("QSplitter::handle { background-color: grey; }")
+
+        self.setup_left_column()
+        self.setup_center_column()
+        self.setup_right_column()
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setMenuBar(menu_bar)
+        main_layout.addWidget(self.main_splitter)
+        self.setLayout(main_layout)
+
+    def setup_menu_bar(self):
         menu_bar = QMenuBar(self)
         file_menu = menu_bar.addMenu("File")
         connection_menu = menu_bar.addMenu("Connection")
@@ -66,62 +69,68 @@ class App(QWidget):
         preferences_menu.addAction("Options", self.show_preferences_dialog)
         about_menu.addAction("Info", self.show_about_dialog)
 
-        # Main layout with QSplitter
-        main_splitter = QSplitter(Qt.Horizontal, self)
-        main_splitter.setStyleSheet("QSplitter::handle { background-color: grey; }")
+        return menu_bar
 
-        # Left Column: Map Display (top) and Video Stream (bottom)
-        left_column_splitter = QSplitter(Qt.Vertical)
-        left_column_splitter.setStyleSheet("QSplitter::handle { background-color: grey; }")
+    def setup_left_column(self):
+        self.left_column_splitter = QSplitter(Qt.Vertical)
+        self.left_column_splitter.setStyleSheet("QSplitter::handle { background-color: grey; }")
 
         self.map_view = QWebEngineView()
         self.map_view.setUrl(QUrl('http://localhost:5000/'))
-        left_column_splitter.addWidget(self.map_view)
+        self.left_column_splitter.addWidget(self.map_view)
 
-        # Add a button to clear the destination marker:
+        map_buttons_widget = self.setup_map_buttons()
+        self.left_column_splitter.addWidget(map_buttons_widget)
+
+        self.main_splitter.addWidget(self.left_column_splitter)
+
+    def setup_map_buttons(self):
         map_buttons_layout = QHBoxLayout()
         for i in range(3):
             btn = QPushButton(f'Button {i+1}', self)
             map_buttons_layout.addWidget(btn)
+
+        goto_marker_btn = QPushButton('GOTO', self)
+        goto_marker_btn.clicked.connect(self.remove_user_marker)
+        poi_marker_btn = QPushButton('Set POI', self)
+        poi_marker_btn.clicked.connect(self.remove_user_marker)
+        home_marker_btn = QPushButton('Set Home', self)
+        home_marker_btn.clicked.connect(self.remove_user_marker)
         clear_marker_btn = QPushButton('Clear Marker', self)
         clear_marker_btn.clicked.connect(self.remove_user_marker)
+
+        map_buttons_layout.addWidget(goto_marker_btn)
+        map_buttons_layout.addWidget(poi_marker_btn)
+        map_buttons_layout.addWidget(home_marker_btn)
         map_buttons_layout.addWidget(clear_marker_btn)
+
         map_buttons_widget = QWidget()
         map_buttons_widget.setLayout(map_buttons_layout)
         map_buttons_widget.setFixedHeight(40)
-        left_column_splitter.addWidget(map_buttons_widget)
+        
+        return map_buttons_widget
 
+    def setup_center_column(self):
+        self.center_column_splitter = QSplitter(Qt.Vertical)
+        self.center_column_splitter.setStyleSheet("QSplitter::handle { background-color: grey; }")
 
-        # Video stream
-        self.video_label = setup_video_stream(self, "video.mp4")
-        left_column_splitter.addWidget(self.video_label)
+        flight_data_widget = self.setup_flight_data()
+        self.center_column_splitter.addWidget(flight_data_widget)
 
-        # Video buttons
-        video_buttons_layout = QHBoxLayout()
-        for i in range(3):
-            btn = QPushButton(f'Button {i+1}', self)
-            video_buttons_layout.addWidget(btn)
-        video_buttons_widget = QWidget()
-        video_buttons_widget.setLayout(video_buttons_layout)
-        video_buttons_widget.setFixedHeight(40)
-        left_column_splitter.addWidget(video_buttons_widget)
+        terminal_widget = self.setup_terminal()
+        self.center_column_splitter.addWidget(terminal_widget)
 
-        main_splitter.addWidget(left_column_splitter)
+        self.main_splitter.addWidget(self.center_column_splitter)
 
-        # Right Column: Flight Data (top) and Terminal (bottom)
-        right_column_splitter = QSplitter(Qt.Vertical)
-        right_column_splitter.setStyleSheet("QSplitter::handle { background-color: grey; }")
-
-        # Flight data
+    def setup_flight_data(self):
         flight_data_splitter = QSplitter(Qt.Vertical)
         flight_data_splitter.setStyleSheet("QSplitter::handle { background-color: grey; }")
 
-        # Important data label
-        self.important_data_label = QLabel("NO MODE SET", self)
-        self.important_data_label.setAlignment(Qt.AlignCenter)
-        self.important_data_label.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
-        self.important_data_label.setFixedHeight(50)
-        flight_data_splitter.addWidget(self.important_data_label)
+        self.status_label = QLabel("NO MODE SET", self)
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
+        self.status_label.setFixedHeight(50)
+        flight_data_splitter.addWidget(self.status_label)
 
         flight_data_horiz_splitter = QSplitter(Qt.Horizontal)
         flight_data_splitter.addWidget(flight_data_horiz_splitter)
@@ -129,6 +138,15 @@ class App(QWidget):
         self.horizon_indicator = ArtificialHorizonIndicator(self)
         flight_data_horiz_splitter.addWidget(self.horizon_indicator)
 
+        flight_data_widget = self.setup_flight_data_labels()
+        flight_data_horiz_splitter.addWidget(flight_data_widget)
+
+        flight_data_buttons_widget = self.setup_flight_data_buttons()
+        flight_data_splitter.addWidget(flight_data_buttons_widget)
+
+        return flight_data_splitter
+
+    def setup_flight_data_labels(self):
         flight_data_layout = QVBoxLayout()
         self.speed_label = QLabel("Speed: 0")
         self.altitude_label = QLabel("Altitude: 0")
@@ -155,9 +173,10 @@ class App(QWidget):
         flight_data_layout.addWidget(self.mah_label)
         flight_data_widget = QWidget()
         flight_data_widget.setLayout(flight_data_layout)
-        flight_data_horiz_splitter.addWidget(flight_data_widget)
 
-        # Flight data buttons
+        return flight_data_widget
+
+    def setup_flight_data_buttons(self):
         flight_data_buttons_layout = QHBoxLayout()
         for i in range(3):
             btn = QPushButton(f'Button {i+1}', self)
@@ -165,10 +184,10 @@ class App(QWidget):
         flight_data_buttons_widget = QWidget()
         flight_data_buttons_widget.setLayout(flight_data_buttons_layout)
         flight_data_buttons_widget.setFixedHeight(40)
-        flight_data_splitter.addWidget(flight_data_buttons_widget)
-        right_column_splitter.addWidget(flight_data_splitter)
 
-        # Terminal
+        return flight_data_buttons_widget
+
+    def setup_terminal(self):
         terminal_layout = QVBoxLayout()
         self.terminal_output = QTextEdit()
         self.terminal_output.setReadOnly(True)
@@ -180,15 +199,57 @@ class App(QWidget):
         terminal_layout.addWidget(self.terminal_input)
         terminal_widget = QWidget()
         terminal_widget.setLayout(terminal_layout)
-        right_column_splitter.addWidget(terminal_widget)
 
-        main_splitter.addWidget(right_column_splitter)
+        return terminal_widget
 
-        # Set the main layout
-        main_layout = QVBoxLayout(self)
-        main_layout.setMenuBar(menu_bar)
-        main_layout.addWidget(main_splitter)
-        self.setLayout(main_layout)
+    def setup_right_column(self):
+        self.video_container_widget = self.setup_video_container()
+        self.main_splitter.addWidget(self.video_container_widget)
+
+    def setup_video_container(self):
+        video_container_widget = QWidget()
+        video_container_layout = QVBoxLayout(video_container_widget)
+
+        self.video_label = setup_video_stream(self, "video.mp4")
+        video_container_layout.addWidget(self.video_label)
+
+        video_buttons_widget = self.setup_video_buttons()
+        video_container_layout.addWidget(video_buttons_widget)
+
+        return video_container_widget
+
+    def setup_video_buttons(self):
+        video_buttons_layout = QHBoxLayout()
+        for i in range(3):
+            btn = QPushButton(f'Button {i+1}', self)
+            video_buttons_layout.addWidget(btn)
+
+        self.video_maximize_button = QPushButton('Maximize Video', self)
+        self.video_maximize_button.clicked.connect(self.toggle_video_maximization)
+        video_buttons_layout.addWidget(self.video_maximize_button)
+
+        video_buttons_widget = QWidget()
+        video_buttons_widget.setLayout(video_buttons_layout)
+        video_buttons_widget.setFixedHeight(40)
+
+        return video_buttons_widget
+
+    def toggle_video_maximization(self):
+        if self.is_video_maximized:
+            # Restore original layout
+            self.main_splitter.insertWidget(0, self.left_column_splitter)
+            self.main_splitter.insertWidget(1, self.center_column_splitter)
+            self.main_splitter.insertWidget(2, self.video_container_widget)
+            self.video_maximize_button.setText('Maximize Video')
+            self.left_column_splitter.show()
+            self.center_column_splitter.show()
+        else:
+            # Hide other widgets and only show video_container_widget
+            self.left_column_splitter.hide()
+            self.center_column_splitter.hide()
+            self.main_splitter.insertWidget(0, self.video_container_widget)
+            self.video_maximize_button.setText('Minimize Video')
+        self.is_video_maximized = not self.is_video_maximized
 
     def remove_user_marker(self):
         shared_data.user_marker_active = False
@@ -238,7 +299,7 @@ class App(QWidget):
     def update_flight_data(self):
         #print(shared_data.latitude, shared_data.longitude)
         self.speed_label.setText(f"Speed: {shared_data.gspd:.2f}")
-        self.altitude_label.setText(f"Altitude: {shared_data.gps_alt:.2f}")
+        self.altitude_label.setText(f"Altitude: {shared_data.pos_uav.alt:.2f}")
         self.pitch_label.setText(f"Pitch: {math.degrees(shared_data.pitch):.2f}")
         self.roll_label.setText(f"Roll: {math.degrees(shared_data.roll):.2f}")
         self.hdg_label.setText(f"Heading: {shared_data.hdg:.2f}")
@@ -251,7 +312,7 @@ class App(QWidget):
         self.mah_label.setText(f"Battery mAh: {shared_data.mah}")
 
         self.horizon_indicator.update_horizon()
-        update_position(shared_data.latitude, shared_data.longitude)
+        #update_position(shared_data.pos_uav.lat, shared_data.pos_uav.lon)
 
         if (time.time() - shared_data.last_time_telemetry) > 3:
             shared_data.telemetry_lost = True
@@ -259,14 +320,14 @@ class App(QWidget):
             shared_data.telemetry_lost = False
 
         if shared_data.telemetry_lost:
-            self.important_data_label.setText("TELEMETRY LOST")
+            self.status_label.setText("TELEMETRY LOST")
         else:
-            self.important_data_label.setText(f"MODE {shared_data.flightmode}")
+            self.status_label.setText(f"MODE {shared_data.flightmode}")
 
         if shared_data.error or shared_data.telemetry_lost:
-            self.important_data_label.setStyleSheet("background-color: red; color: black; font-size: 20px; font-weight: bold;")
+            self.status_label.setStyleSheet("background-color: red; color: black; font-size: 20px; font-weight: bold;")
         else:
-            self.important_data_label.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
+            self.status_label.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
 
 
 if __name__ == '__main__':

@@ -131,11 +131,12 @@ def handleCrsfPacket(ptype, data):
         if shared_data.printtele: print(f"Device Info: {packet}")
 
     elif data[2] == PacketsTypes.GPS:
-        shared_data.latitude = int.from_bytes(data[3:7], byteorder='big', signed=True) / 1e7
-        shared_data.longitude = int.from_bytes(data[7:11], byteorder='big', signed=True) / 1e7
+        shared_data.got_gps = True
+        shared_data.uav_pos.lat = int.from_bytes(data[3:7], byteorder='big', signed=True) / 1e7
+        shared_data.uav_pos.lon = int.from_bytes(data[7:11], byteorder='big', signed=True) / 1e7
         shared_data.gspd = int.from_bytes(data[11:13], byteorder='big', signed=True) / 36.0
         shared_data.hdg =  int.from_bytes(data[13:15], byteorder='big', signed=True) / 100.0
-        shared_data.alt = int.from_bytes(data[15:17], byteorder='big', signed=True) - 1000
+        shared_data.uav_pos.alt = int.from_bytes(data[15:17], byteorder='big', signed=True) - 1000
         shared_data.sats = data[17]
         shared_data.last_time_telemetry = time.time()
         if shared_data.printtele: print(f"GPS: Pos={shared_data.latitude} {shared_data.longitude} GSpd={shared_data.gspd:0.1f}m/s Hdg={shared_data.hdg:0.1f} Alt={shared_data.alt}m Sats={shared_data.sats}")
@@ -154,7 +155,7 @@ def handleCrsfPacket(ptype, data):
         print(f"Unknown 0x{ptype:02x}: {packet}")
 
 
-def generate_crsf_data(app):
+def crsf_telemetry(app):
     telem_port = "/dev/ttyACM0"
     telem_baud = 420000
 
@@ -186,20 +187,31 @@ def generate_crsf_data(app):
                 else:
                     break
 
-def generate_dummy_data(app):
+def dummy_telemetry(app):
     while True:
         shared_data.flightmode = "MODE: ANGLE" if random.random() > 0.5 else "MODE: HORIZON"
         shared_data.speed = random.randint(100, 300)
-        shared_data.altitude = random.randint(1000, 30000)
         shared_data.pitch = random.uniform(-10, 10)
         shared_data.roll = random.uniform(-10, 10)
-        shared_data.latitude += random.uniform(-0.001, 0.001)  # Update latitude
-        shared_data.longitude += random.uniform(-0.001, 0.001)  # Update longitude
-        shared_data.video_select = False
+        shared_data.pos_uav.lat += random.uniform(-0.001, 0.001)  # Update latitude
+        shared_data.pos_uav.lon += random.uniform(-0.001, 0.001)  # Update longitude
+        shared_data.pos_uav.alt += random.randint(1, 2)
+        shared_data.baro_alt = shared_data.pos_uav.alt
+        shared_data.vbat -= 0.001
+        shared_data.mah = round(5000.0 * (((shared_data.vbat/shared_data.scells)-3.5) / 0.7),1)
+        shared_data.pct = round(100.0 * (((shared_data.vbat/shared_data.scells)-3.5) / 0.7),2)
         time.sleep(1)
 
 def start_data_thread(app):
-    if shared_data.simulate:
-        threading.Thread(target=generate_dummy_data, args=(app,), daemon=True).start()
+    if shared_data.telemetry == "random":
+        threading.Thread(target=dummy_telemetry, args=(app,), daemon=True).start()
+        shared_data.pos_uav.lat = 36.52982407028365
+        shared_data.pos_uav.lon = -83.21680266631701
+        shared_data.pos_uav.alt = random.randint(50, 500)
+        shared_data.vbat = 12.6
+        shared_data.mah = 5000.0
+        shared_data.pct = 100
+        shared_data.got_gps = True
+        
     elif shared_data.telemetry == "crsf":
-        threading.Thread(target=generate_crsf_data, args=(app,), daemon=True).start()
+        threading.Thread(target=crsf_telemetry, args=(app,), daemon=True).start()

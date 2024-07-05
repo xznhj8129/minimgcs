@@ -18,6 +18,21 @@ This product can expose you to ChatGPT-written code, which is known to the State
 - Integrate MCVST
 - Additional rxo telemetry options
 - 2-way link support
-- 
+
+## Screens and buttons:
+### Map:
+- GOTO
+- Set POI
+- Set Home
+- Clear marker
+- Maximize
+- Lock view
+
+### Video:
+- Source
+- Zoom
+- Maximize
+
+## Primary Flight Display:
 
 
