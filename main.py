@@ -16,6 +16,7 @@ import threading
 import cv2
 import math
 import requests
+import geospatial
 import time
 from video import ClickableLabel
 from map_server import run_flask, update_position, get_position
@@ -79,30 +80,55 @@ class App(QWidget):
         self.map_view.setUrl(QUrl('http://localhost:5000/'))
         self.left_column_splitter.addWidget(self.map_view)
 
+        map_info_widget = self.setup_map_info()
+        self.left_column_splitter.addWidget(map_info_widget)
+
         map_buttons_widget = self.setup_map_buttons()
         self.left_column_splitter.addWidget(map_buttons_widget)
 
         self.main_splitter.addWidget(self.left_column_splitter)
 
+    def setup_map_info(self):
+        map_info_layout = QHBoxLayout()
+
+        self.distance_to_home_label = QLabel("Distance to home: 0", self)
+        self.distance_to_marker_label = QLabel("Distance to marker: 0", self)
+        self.gps_label = QLabel("GPS: 0,0", self)
+        #self.mgrs_label = QLabel("MGRS: 0", self)
+
+        map_info_layout.addWidget(self.distance_to_home_label)
+        map_info_layout.addSpacing(10)  # Fixed distance between labels
+        map_info_layout.addWidget(self.distance_to_marker_label)
+        map_info_layout.addSpacing(10)  # Fixed distance between labels
+        map_info_layout.addWidget(self.gps_label)
+        #map_info_layout.addSpacing(10)  # Fixed distance between labels
+        #map_info_layout.addWidget(self.mgrs_label)
+
+        map_info_widget = QWidget()
+        map_info_widget.setLayout(map_info_layout)
+        map_info_widget.setFixedHeight(40)
+
+        return map_info_widget
+
     def setup_map_buttons(self):
         map_buttons_layout = QHBoxLayout()
-        for i in range(3):
-            btn = QPushButton(f'Button {i+1}', self)
-            map_buttons_layout.addWidget(btn)
 
         goto_marker_btn = QPushButton('GOTO', self)
-        goto_marker_btn.clicked.connect(self.remove_user_marker)
+        goto_marker_btn.clicked.connect(self.marker_set_goto)
         poi_marker_btn = QPushButton('Set POI', self)
-        poi_marker_btn.clicked.connect(self.remove_user_marker)
+        poi_marker_btn.clicked.connect(self.marker_set_poi)
         home_marker_btn = QPushButton('Set Home', self)
-        home_marker_btn.clicked.connect(self.remove_user_marker)
+        home_marker_btn.clicked.connect(self.marker_set_home)
         clear_marker_btn = QPushButton('Clear Marker', self)
         clear_marker_btn.clicked.connect(self.remove_user_marker)
+        view_lock_btn = QPushButton('View lock', self)
+        view_lock_btn.clicked.connect(self.map_view_lock)
 
         map_buttons_layout.addWidget(goto_marker_btn)
         map_buttons_layout.addWidget(poi_marker_btn)
         map_buttons_layout.addWidget(home_marker_btn)
         map_buttons_layout.addWidget(clear_marker_btn)
+        map_buttons_layout.addWidget(view_lock_btn)
 
         map_buttons_widget = QWidget()
         map_buttons_widget.setLayout(map_buttons_layout)
@@ -152,6 +178,7 @@ class App(QWidget):
         self.altitude_label = QLabel("Altitude: 0")
         self.pitch_label = QLabel("Pitch: 0")
         self.roll_label = QLabel("Roll: 0")
+        self.yaw_label = QLabel("Yaw: 0")
         self.hdg_label = QLabel("Heading: 0")
         self.rssi_label = QLabel("RSSI: 0")
         self.lq_label = QLabel("LQ: 0")
@@ -164,6 +191,7 @@ class App(QWidget):
         flight_data_layout.addWidget(self.altitude_label)
         flight_data_layout.addWidget(self.pitch_label)
         flight_data_layout.addWidget(self.roll_label)
+        flight_data_layout.addWidget(self.yaw_label)
         flight_data_layout.addWidget(self.hdg_label)
         flight_data_layout.addWidget(self.rssi_label)
         flight_data_layout.addWidget(self.lq_label)
@@ -210,7 +238,7 @@ class App(QWidget):
         video_container_widget = QWidget()
         video_container_layout = QVBoxLayout(video_container_widget)
 
-        self.video_label = setup_video_stream(self, "video.mp4")
+        self.video_label = setup_video_stream(self, shared_data.video_source)
         video_container_layout.addWidget(self.video_label)
 
         video_buttons_widget = self.setup_video_buttons()
@@ -250,6 +278,24 @@ class App(QWidget):
             self.main_splitter.insertWidget(0, self.video_container_widget)
             self.video_maximize_button.setText('Minimize Video')
         self.is_video_maximized = not self.is_video_maximized
+
+    def map_view_lock(self):
+        shared_data.map_center = not shared_data.map_center
+
+    def marker_set_goto(self):
+        shared_data.pos_goto = geospatial.GPSposition(shared_data.pos_marker.lat,shared_data.pos_marker.lon,0)
+        shared_data.goto_set = True
+        shared_data.user_marker_active = False
+
+    def marker_set_poi(self):
+        shared_data.pos_poi = geospatial.GPSposition(shared_data.pos_marker.lat,shared_data.pos_marker.lon,0)
+        shared_data.poi_set = True
+        shared_data.user_marker_active = False
+
+    def marker_set_home(self):
+        shared_data.pos_home = geospatial.GPSposition(shared_data.pos_marker.lat,shared_data.pos_marker.lon,0)
+        shared_data.home_set = True
+        shared_data.user_marker_active = False
 
     def remove_user_marker(self):
         shared_data.user_marker_active = False
@@ -302,6 +348,7 @@ class App(QWidget):
         self.altitude_label.setText(f"Altitude: {shared_data.pos_uav.alt:.2f}")
         self.pitch_label.setText(f"Pitch: {math.degrees(shared_data.pitch):.2f}")
         self.roll_label.setText(f"Roll: {math.degrees(shared_data.roll):.2f}")
+        self.yaw_label.setText(f"Yaw: {shared_data.yaw:.2f}")
         self.hdg_label.setText(f"Heading: {shared_data.hdg:.2f}")
         self.rssi_label.setText(f"RSSI: {shared_data.rssi1:.2f}")
         self.lq_label.setText(f"LQ: {shared_data.lq}")
@@ -313,6 +360,19 @@ class App(QWidget):
 
         self.horizon_indicator.update_horizon()
         #update_position(shared_data.pos_uav.lat, shared_data.pos_uav.lon)
+        try:
+            vechome = geospatial.gps_to_vector(shared_data.pos_uav, shared_data.pos_home)
+        except:
+            vechome = geospatial.PosVector(0,0,0)
+        try:
+            vecmarker = geospatial.gps_to_vector(shared_data.pos_uav, shared_data.pos_marker)
+        except:
+            vecmarker = geospatial.PosVector(0,0,0)
+        #posmgrs = geospatial.latlon_to_mgrs(shared_data.pos_uav)
+        self.distance_to_home_label.setText(f"Home: {round(vechome.dist)} m")
+        self.distance_to_marker_label.setText(f"Marker: {round(vecmarker.dist)} m")
+        self.gps_label.setText(f"GPS: {shared_data.pos_uav.lat:.8f}, {shared_data.pos_uav.lon:.8f}")
+        #self.mgrs_label.setText(f"MGRS: {posmgrs}")
 
         if (time.time() - shared_data.last_time_telemetry) > 3:
             shared_data.telemetry_lost = True

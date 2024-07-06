@@ -1,79 +1,161 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Map</title>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/leaflet.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/leaflet.css" />
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script>
+        L_NO_TOUCH = false;
+        L_DISABLE_3D = false;
+    </script>
+    <style>html, body {width: 100%; height: 100%; margin: 0; padding: 0;}</style>
+    <style>#map {position: absolute; top: 0; bottom: 0; right: 0; left: 0;}</style>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-rotatedmarker@0.2.0/leaflet.rotatedMarker.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <style>
+        #map { width: 100%; height: 100%; }
+        .leaflet-container { font-size: 1rem; }
+    </style>
 </head>
 <body>
-    <div id="map" style="width: 100%; height: 100vh;"></div>
+    <div id="map"></div>
+    <button onclick="toggleViewLock()">Toggle View Lock</button>
     <script>
-        var initialLat = {{ latitude }};
-        var initialLon = {{ longitude }};
-        var map = L.map('map').setView([initialLat, initialLon], 10);
-
+        let map = L.map('map').setView([{{ latitude }}, {{ longitude }}], 10);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        var initialMarker = L.marker([initialLat, initialLon]).addTo(map);
-        var userMarker = null;
+        let uavMarker = L.marker([{{ latitude }}, {{ longitude }}], {
+            icon: L.icon({
+                iconUrl: '/static/images/arrow.png',
+                iconSize: [32, 32],
+                iconAnchor: [16, 16] // Center the icon
+            }),
+            rotationAngle: 0
+        }).addTo(map);
 
-        function updateMarkerPosition() {
-            $.getJSON('/update_marker', function(data) {
-                var newLatLng = new L.LatLng(data.latitude, data.longitude);
-                initialMarker.setLatLng(newLatLng);
-                if (data.user_active) {
-                    var userLatLng = new L.LatLng(data.user_latitude, data.user_longitude);
-                    if (userMarker) {
-                        userMarker.setLatLng(userLatLng);
-                    } else {
-                        userMarker = L.marker([data.user_latitude, data.user_longitude]).addTo(map);
-                    }
-                } else {
-                    if (userMarker) {
-                        map.removeLayer(userMarker);
-                        userMarker = null;
-                    }
-                }
+        let userMarker = null;
+        let homeMarker = null;
+        let gotoMarker = null;
+        let poiMarker = null;
+        let wpMarker = null;
+        let viewLocked = false;
+        let initialGPSSet = false;
+
+        function updateUAVMarker(data) {
+            uavMarker.setLatLng([data.latitude, data.longitude]);
+            uavMarker.setRotationAngle(data.yaw); // Rotate based on yaw
+            if (data.map_center) {
+                map.setView([data.latitude, data.longitude], map.getZoom());
+            }
+        }
+
+        function addOrUpdateMarker(marker, lat, lon, iconUrl) {
+            if (marker) {
+                marker.setLatLng([lat, lon]);
+            } else {
+                marker = L.marker([lat, lon], {
+                    icon: L.icon({
+                        iconUrl: iconUrl,
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 16] // Center the icon
+                    })
+                }).addTo(map);
+            }
+            return marker;
+        }
+
+        function toggleViewLock() {
+            viewLocked = !viewLocked;
+            fetch(viewLocked ? '/lock_view' : '/unlock_view', {
+                method: 'POST'
             });
+        }
+
+        function checkGPSAndCenter(data) {
+            if (data.got_gps && !initialGPSSet) {
+                map.setView([data.latitude, data.longitude], 13); // Center and zoom once
+                initialGPSSet = true;
+            }
+        }
+
+        function updateMarkers(data) {
+            // UAV Marker
+            updateUAVMarker(data);
+
+            // User Marker
+            if (data.user_active) {
+                userMarker = addOrUpdateMarker(userMarker, data.user_latitude, data.user_longitude, 'http://maps.google.com/mapfiles/ms/icons/red-dot.png');
+            } else if (userMarker) {
+                map.removeLayer(userMarker);
+                userMarker = null;
+            }
+
+            // Home Marker
+            if (data.home_set) {
+                homeMarker = addOrUpdateMarker(homeMarker, data.home_lat, data.home_lon, 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png');
+            } else if (homeMarker) {
+                map.removeLayer(homeMarker);
+                homeMarker = null;
+            }
+
+            // GOTO Marker
+            if (data.goto_set) {
+                gotoMarker = addOrUpdateMarker(gotoMarker, data.goto_lat, data.goto_lon, 'http://maps.google.com/mapfiles/ms/icons/green-dot.png');
+            } else if (gotoMarker) {
+                map.removeLayer(gotoMarker);
+                gotoMarker = null;
+            }
+
+            // POI Marker
+            if (data.poi_set) {
+                poiMarker = addOrUpdateMarker(poiMarker, data.poi_lat, data.poi_lon, 'http://maps.google.com/mapfiles/ms/icons/yellow-dot.png');
+            } else if (poiMarker) {
+                map.removeLayer(poiMarker);
+                poiMarker = null;
+            }
+
+            // Waypoint Marker
+            if (data.wp_set) {
+                wpMarker = addOrUpdateMarker(wpMarker, data.wp_lat, data.wp_lon, 'http://maps.google.com/mapfiles/ms/icons/purple-dot.png');
+            } else if (wpMarker) {
+                map.removeLayer(wpMarker);
+                wpMarker = null;
+            }
+        }
+
+        function fetchData() {
+            fetch('/update_marker')
+                .then(response => response.json())
+                .then(data => {
+                    checkGPSAndCenter(data);
+                    updateMarkers(data);
+                });
         }
 
         map.on('click', function(e) {
-            var lat = e.latlng.lat;
-            var lon = e.latlng.lng;
-            $.ajax({
-                url: '/set_position',
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({latitude: lat, longitude: lon}),
-                success: function(response) {
-                    console.log('Position set to:', response);
-                    if (!userMarker) {
-                        userMarker = L.marker([lat, lon]).addTo(map);
-                    }
-                }
+            let lat = e.latlng.lat;
+            let lon = e.latlng.lng;
+            fetch('/set_position', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ latitude: lat, longitude: lon })
+            }).then(() => {
+                userMarker = addOrUpdateMarker(userMarker, lat, lon, 'http://maps.google.com/mapfiles/ms/icons/red-dot.png');
             });
         });
 
-        function removeMarker() {
-            $.ajax({
-                url: '/remove_marker',
-                type: 'POST',
-                success: function(response) {
-                    console.log('User marker removed:', response);
-                    if (userMarker) {
-                        map.removeLayer(userMarker);
-                        userMarker = null;
-                    }
-                }
-            });
-        }
-
-        setInterval(updateMarkerPosition, 1000);
+        // Fetch data at intervals
+        setInterval(fetchData, 1000); // Adjust the interval as needed
     </script>
 </body>
 </html>

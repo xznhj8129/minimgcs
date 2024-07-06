@@ -23,7 +23,7 @@ class PosVector():
     
 def latlon_to_mgrs(latlon):
     milobj = mgrs.MGRS()
-    return milobj.toMGRS(latlon.lat,latlon.lon,0)
+    return milobj.toMGRS(latlon.lat,latlon.lon)
 
 def mgrs_to_latlon(milgrid):
     milobj = mgrs.MGRS()

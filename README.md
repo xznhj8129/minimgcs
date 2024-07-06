@@ -5,7 +5,17 @@ Heavily WIP, 90% is placeholder/unfinished
 CRSF telemetry parsing from https://github.com/crsf-wg/crsf/wiki/Python-Parser
 This product can expose you to ChatGPT-written code, which is known to the State of California to cause cancer.
 
-# Screens:
+## Requirements:
+PyQt5
+Flask
+Flask-CORS
+Folium
+geographiclib
+geojson
+MGRS
+
+
+## Screens:
 - Map
 - PFD
 - Terminal?

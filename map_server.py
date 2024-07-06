@@ -21,15 +21,11 @@ def set_user_marker(lat, lon):
         shared_data.pos_marker.lat = lat
         shared_data.pos_marker.lon = lon
         shared_data.user_marker_active = True
-        print("User point:",lat,lon)
+        print("User point:", lat, lon)
 
 def get_user_marker():
     with shared_data.lock:
         return shared_data.pos_marker.lat, shared_data.pos_marker.lon, shared_data.user_marker_active
-
-def remove_user_marker():
-    with shared_data.lock:
-        shared_data.user_marker_active = False
 
 @app.route('/')
 def index():
@@ -40,13 +36,29 @@ def index():
 def update_marker():
     lat, lon = get_position()
     user_lat, user_lon, user_active = get_user_marker()
-    return jsonify({
-        'latitude': lat, 
-        'longitude': lon, 
-        'user_latitude': user_lat, 
-        'user_longitude': user_lon, 
-        'user_active': user_active
-    })
+    response = {
+        'latitude': lat,
+        'longitude': lon,
+        'yaw': shared_data.yaw,
+        'user_latitude': user_lat,
+        'user_longitude': user_lon,
+        'user_active': user_active,
+        'got_gps': shared_data.got_gps,
+        'map_center': shared_data.map_center,
+        'home_set': shared_data.home_set,
+        'home_lat': shared_data.pos_home.lat,
+        'home_lon': shared_data.pos_home.lon,
+        'goto_set': shared_data.goto_set,
+        'goto_lat': shared_data.pos_goto.lat,
+        'goto_lon': shared_data.pos_goto.lon,
+        'poi_set': shared_data.poi_set,
+        'poi_lat': shared_data.pos_poi.lat,
+        'poi_lon': shared_data.pos_poi.lon,
+        'wp_set': shared_data.wp_set,
+        'wp_lat': shared_data.pos_wp.lat,
+        'wp_lon': shared_data.pos_wp.lon
+    }
+    return jsonify(response)
 
 @app.route('/set_position', methods=['POST'])
 def set_position():
@@ -68,6 +80,3 @@ def shutdown():
 
 def run_flask():
     app.run(threaded=True)
-    
-
-    
