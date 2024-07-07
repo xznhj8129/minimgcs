@@ -195,16 +195,19 @@ def dummy_telemetry(app):
         shared_data.pos_uav.lon += random.uniform(-0.001, 0.001)  # Update longitude
         shared_data.pos_uav.alt += random.randint(1, 2)
         shared_data.baro_alt = shared_data.pos_uav.alt
-        shared_data.vbat -= 0.001
+        shared_data.vbat -= 0.01
         shared_data.mah = round(5000.0 * (((shared_data.vbat/shared_data.scells)-3.5) / 0.7),1)
         shared_data.pct = round(100.0 * (((shared_data.vbat/shared_data.scells)-3.5) / 0.7),2)
         shared_data.yaw += random.randint(-5, 5)
+        shared_data.lq = random.randint(0, 100)
+        shared_data.rssi1 = random.uniform(-110, -10)
         shared_data.last_time_telemetry = time.time()
         time.sleep(1)
 
 def start_data_thread(app):
     if shared_data.telemetry == "random":
         threading.Thread(target=dummy_telemetry, args=(app,), daemon=True).start()
+        shared_data.video_source = "video.mp4"
         shared_data.pos_uav.lat = 36.52982407028365
         shared_data.pos_uav.lon = -83.21680266631701
         shared_data.pos_uav.alt = random.randint(50, 500)

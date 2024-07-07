@@ -22,6 +22,8 @@ MGRS
 - Video
 
 ## ToDo:
+- Test with HITL
+- Audio alarms
 - Usable config dialogs
 - Integrate functions with UNAVlib and use it
 - Tolerable PFD

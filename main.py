@@ -6,11 +6,12 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QMenuBar, QMenu, QAction
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtCore import Qt, QTimer, pyqtSlot,  QUrl, pyqtSignal, QObject
 from shared_data import shared_data
-from connection import setup_video_stream
 from telemetry import start_data_thread
 from user_input import keyPressEvent
 from instruments import ArtificialHorizonIndicator
 from settings import ConnectionDialog
+from video import ClickableLabel, setup_video_stream
+from map_server import run_flask, update_position, get_position
 import argparse
 import threading
 import cv2
@@ -18,8 +19,6 @@ import math
 import requests
 import geospatial
 import time
-from video import ClickableLabel
-from map_server import run_flask, update_position, get_position
 
 
 class App(QWidget):
@@ -36,6 +35,7 @@ class App(QWidget):
         self.map_container_widget = None
         self.flight_data_container_widget = None
         self.terminal_container_widget = None
+        self.zoom_factor = 1.0
 
         self.initUI()
 
@@ -113,22 +113,23 @@ class App(QWidget):
     def setup_map_buttons(self):
         map_buttons_layout = QHBoxLayout()
 
-        goto_marker_btn = QPushButton('GOTO', self)
-        goto_marker_btn.clicked.connect(self.marker_set_goto)
-        poi_marker_btn = QPushButton('Set POI', self)
-        poi_marker_btn.clicked.connect(self.marker_set_poi)
-        home_marker_btn = QPushButton('Set Home', self)
-        home_marker_btn.clicked.connect(self.marker_set_home)
-        clear_marker_btn = QPushButton('Clear Marker', self)
-        clear_marker_btn.clicked.connect(self.remove_user_marker)
-        view_lock_btn = QPushButton('View lock', self)
-        view_lock_btn.clicked.connect(self.map_view_lock)
+        self.btn_goto_marker = QPushButton('GOTO', self)
+        self.btn_poi_marker = QPushButton('Set POI', self)
+        self.btn_home_marker = QPushButton('Set Home', self)
+        self.btn_clear_marker = QPushButton('Clear Marker', self)
+        self.btn_view_lock = QPushButton('View lock', self)
 
-        map_buttons_layout.addWidget(goto_marker_btn)
-        map_buttons_layout.addWidget(poi_marker_btn)
-        map_buttons_layout.addWidget(home_marker_btn)
-        map_buttons_layout.addWidget(clear_marker_btn)
-        map_buttons_layout.addWidget(view_lock_btn)
+        self.btn_goto_marker.clicked.connect(self.marker_set_goto)
+        self.btn_poi_marker.clicked.connect(self.marker_set_poi)
+        self.btn_home_marker.clicked.connect(self.marker_set_home)
+        self.btn_clear_marker.clicked.connect(self.remove_user_marker)
+        self.btn_view_lock.clicked.connect(self.map_view_lock)
+
+        map_buttons_layout.addWidget(self.btn_goto_marker)
+        map_buttons_layout.addWidget(self.btn_poi_marker)
+        map_buttons_layout.addWidget(self.btn_home_marker)
+        map_buttons_layout.addWidget(self.btn_clear_marker)
+        map_buttons_layout.addWidget(self.btn_view_lock)
 
         map_buttons_widget = QWidget()
         map_buttons_widget.setLayout(map_buttons_layout)
@@ -143,10 +144,41 @@ class App(QWidget):
         flight_data_widget = self.setup_flight_data()
         self.center_column_splitter.addWidget(flight_data_widget)
 
+        wp_widget = self.setup_warning_panel()
+        self.center_column_splitter.addWidget(wp_widget)
+
         terminal_widget = self.setup_terminal()
         self.center_column_splitter.addWidget(terminal_widget)
 
         self.main_splitter.addWidget(self.center_column_splitter)
+
+    def setup_critical_info(self):
+        critical_info_layout = QHBoxLayout()
+
+        self.ci_vbat_label = QLabel("VBAT 12.6", self)
+        self.ci_vbat_label.setAlignment(Qt.AlignCenter)
+        self.ci_vcell_label = QLabel("VCELL 4.2", self)
+        self.ci_vcell_label.setAlignment(Qt.AlignCenter)
+        self.ci_rssi_label = QLabel("RSSI -10", self)
+        self.ci_rssi_label.setAlignment(Qt.AlignCenter)
+        self.ci_lq_label = QLabel("LQ 100", self)
+        self.ci_lq_label.setAlignment(Qt.AlignCenter)
+
+        critical_info_layout.addWidget(self.ci_vbat_label)
+        critical_info_layout.addSpacing(10)
+        critical_info_layout.addWidget(self.ci_vcell_label)
+        critical_info_layout.addSpacing(10)
+        critical_info_layout.addWidget(self.ci_rssi_label)
+        critical_info_layout.addSpacing(10)
+        critical_info_layout.addWidget(self.ci_lq_label)
+
+        critical_info_widget = QWidget()
+        critical_info_widget.setStyleSheet("font-size: 20px; font-weight: bold;")
+        critical_info_widget.setLayout(critical_info_layout)
+        critical_info_widget.setFixedHeight(40)
+
+        return critical_info_widget
+
 
     def setup_flight_data(self):
         flight_data_splitter = QSplitter(Qt.Vertical)
@@ -157,6 +189,9 @@ class App(QWidget):
         self.status_label.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
         self.status_label.setFixedHeight(50)
         flight_data_splitter.addWidget(self.status_label)
+
+        self.critical_info_widget = self.setup_critical_info()
+        flight_data_splitter.addWidget(self.critical_info_widget)
 
         flight_data_horiz_splitter = QSplitter(Qt.Horizontal)
         flight_data_splitter.addWidget(flight_data_horiz_splitter)
@@ -184,9 +219,10 @@ class App(QWidget):
         self.lq_label = QLabel("LQ: 0")
         self.sats_label = QLabel("Sats: 0")
         self.vbat_label = QLabel("VBAT: 0")
-        self.cur_label = QLabel("Current: 0")
-        self.pct_label = QLabel("Battery %: 0")
-        self.mah_label = QLabel("Battery mAh: 0")
+        self.cur_label = QLabel("CUR: 0")
+        self.pct_label = QLabel("BAT %: 0")
+        self.mah_label = QLabel("BAT mAh: 0")
+        self.tt_label = QLabel("TELE sec: 0")
         flight_data_layout.addWidget(self.speed_label)
         flight_data_layout.addWidget(self.altitude_label)
         flight_data_layout.addWidget(self.pitch_label)
@@ -199,10 +235,62 @@ class App(QWidget):
         flight_data_layout.addWidget(self.cur_label)
         flight_data_layout.addWidget(self.pct_label)
         flight_data_layout.addWidget(self.mah_label)
+        flight_data_layout.addWidget(self.tt_label)
         flight_data_widget = QWidget()
         flight_data_widget.setLayout(flight_data_layout)
 
         return flight_data_widget
+
+    def setup_warning_panel(self):
+        main_panel = QVBoxLayout()
+
+        # First row
+        warning_panel1 = QHBoxLayout()
+        self.warn_ind_vbat = QLabel("BATTERY")
+        self.warn_ind_lq = QLabel("LQ")
+        self.warn_ind_rssi = QLabel("RSSI")
+
+        self.warn_ind_vbat.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
+        self.warn_ind_lq.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
+        self.warn_ind_rssi.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
+        self.warn_ind_vbat.setAlignment(Qt.AlignCenter)
+        self.warn_ind_lq.setAlignment(Qt.AlignCenter)
+        self.warn_ind_rssi.setAlignment(Qt.AlignCenter)
+        
+        warning_panel1.addWidget(self.warn_ind_vbat)
+        warning_panel1.addSpacing(10)
+        warning_panel1.addWidget(self.warn_ind_lq)
+        warning_panel1.addSpacing(10)
+        warning_panel1.addWidget(self.warn_ind_rssi)
+
+        # Second row
+        #warning_panel2 = QHBoxLayout()
+        #self.placeholder1 = QLabel("PLACEHOLDER 1")
+        #self.placeholder2 = QLabel("PLACEHOLDER 2")
+        #self.placeholder3 = QLabel("PLACEHOLDER 3")
+
+        #self.placeholder1.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
+        #self.placeholder2.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
+        #self.placeholder3.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
+        #self.placeholder1.setAlignment(Qt.AlignCenter)
+        #self.placeholder2.setAlignment(Qt.AlignCenter)
+        #self.placeholder3.setAlignment(Qt.AlignCenter)
+        
+        #warning_panel2.addWidget(self.placeholder1)
+        #warning_panel2.addSpacing(10)
+        #warning_panel2.addWidget(self.placeholder2)
+        #warning_panel2.addSpacing(10)
+        #warning_panel2.addWidget(self.placeholder3)
+
+        # Add both rows to the main panel
+        main_panel.addLayout(warning_panel1)
+        #main_panel.addSpacing(10)
+        #main_panel.addLayout(warning_panel2)
+
+        warning_panel_widget = QWidget()
+        warning_panel_widget.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
+        warning_panel_widget.setLayout(main_panel)
+        return warning_panel_widget
 
     def setup_flight_data_buttons(self):
         flight_data_buttons_layout = QHBoxLayout()
@@ -221,10 +309,12 @@ class App(QWidget):
         self.terminal_output.setReadOnly(True)
         self.terminal_output.setStyleSheet("background-color: black; color: white;")
         terminal_layout.addWidget(self.terminal_output)
+
         self.terminal_input = QLineEdit()
         self.terminal_input.returnPressed.connect(self.process_command)
         self.terminal_input.setStyleSheet("background-color: black; color: white;")
         terminal_layout.addWidget(self.terminal_input)
+
         terminal_widget = QWidget()
         terminal_widget.setLayout(terminal_layout)
 
@@ -252,9 +342,13 @@ class App(QWidget):
             btn = QPushButton(f'Button {i+1}', self)
             video_buttons_layout.addWidget(btn)
 
-        self.video_maximize_button = QPushButton('Maximize Video', self)
-        self.video_maximize_button.clicked.connect(self.toggle_video_maximization)
-        video_buttons_layout.addWidget(self.video_maximize_button)
+        self.btn_video_trackzoom = QPushButton('Track zoom', self)
+        self.btn_video_trackzoom.clicked.connect(self.toggle_video_trackzoom)
+        video_buttons_layout.addWidget(self.btn_video_trackzoom)
+
+        self.btn_video_maximize = QPushButton('Maximize Video', self)
+        self.btn_video_maximize.clicked.connect(self.toggle_video_maximization)
+        video_buttons_layout.addWidget(self.btn_video_maximize)
 
         video_buttons_widget = QWidget()
         video_buttons_widget.setLayout(video_buttons_layout)
@@ -262,13 +356,16 @@ class App(QWidget):
 
         return video_buttons_widget
 
+    def toggle_video_trackzoom(self):
+        shared_data.video_track_zoom_active = not shared_data.video_track_zoom_active
+
     def toggle_video_maximization(self):
         if self.is_video_maximized:
             # Restore original layout
             self.main_splitter.insertWidget(0, self.left_column_splitter)
             self.main_splitter.insertWidget(1, self.center_column_splitter)
             self.main_splitter.insertWidget(2, self.video_container_widget)
-            self.video_maximize_button.setText('Maximize Video')
+            self.btn_video_maximize.setText('Maximize Video')
             self.left_column_splitter.show()
             self.center_column_splitter.show()
         else:
@@ -276,7 +373,7 @@ class App(QWidget):
             self.left_column_splitter.hide()
             self.center_column_splitter.hide()
             self.main_splitter.insertWidget(0, self.video_container_widget)
-            self.video_maximize_button.setText('Minimize Video')
+            self.btn_video_maximize.setText('Minimize Video')
         self.is_video_maximized = not self.is_video_maximized
 
     def map_view_lock(self):
@@ -322,6 +419,9 @@ class App(QWidget):
 
     def handle_video_click(self, x, y):
         print(f"Clicked coordinates in original frame: ({x}, {y})")
+        
+    def handle_zoom_change(self, zoom_factor):
+        self.zoom_factor = zoom_factor
 
     def process_command(self):
         command = self.terminal_input.text()
@@ -341,6 +441,26 @@ class App(QWidget):
         self.update_timer.timeout.connect(self.update_flight_data)
         self.update_timer.start(100)
 
+        self.timer2 = QTimer(self)
+        self.timer2.timeout.connect(self.update_button_color)
+        self.timer2.start(100)
+
+    def update_button_color(self):
+        if shared_data.video_track_zoom_active:
+            self.btn_video_trackzoom.setStyleSheet('background-color: red')
+        else:
+            self.btn_video_trackzoom.setStyleSheet('')
+        
+        if shared_data.map_center:
+            self.btn_view_lock.setStyleSheet('background-color: red')
+        else:
+            self.btn_view_lock.setStyleSheet('')
+
+        if shared_data.map_center:
+            self.btn_view_lock.setStyleSheet('background-color: red')
+        else:
+            self.btn_view_lock.setStyleSheet('')
+
     @pyqtSlot()
     def update_flight_data(self):
         #print(shared_data.latitude, shared_data.longitude)
@@ -354,12 +474,18 @@ class App(QWidget):
         self.lq_label.setText(f"LQ: {shared_data.lq}")
         self.sats_label.setText(f"Sats: {shared_data.sats}")
         self.vbat_label.setText(f"VBAT: {shared_data.vbat:.2f}")
-        self.cur_label.setText(f"Current: {shared_data.curr}")
-        self.pct_label.setText(f"Battery %: {shared_data.pct}")
-        self.mah_label.setText(f"Battery mAh: {shared_data.mah}")
+        self.cur_label.setText(f"CUR: {shared_data.curr}")
+        self.pct_label.setText(f"BAT %: {shared_data.pct}")
+        self.mah_label.setText(f"BAT mAh: {shared_data.mah}")
+        self.tt_label.setText(f"TELE sec: {round(time.time() - shared_data.last_time_telemetry,1)}")
+
+        self.ci_vbat_label.setText(f"BAT {shared_data.vbat:.2f} V")
+        self.ci_vcell_label.setText(f"CELL {(shared_data.vbat/shared_data.scells):.2f} V")
+        self.ci_rssi_label.setText(f"RSSI {shared_data.rssi1:.1f}")
+        self.ci_lq_label.setText(f"LQ {shared_data.lq}")
 
         self.horizon_indicator.update_horizon()
-        #update_position(shared_data.pos_uav.lat, shared_data.pos_uav.lon)
+
         try:
             vechome = geospatial.gps_to_vector(shared_data.pos_uav, shared_data.pos_home)
         except:
@@ -368,11 +494,10 @@ class App(QWidget):
             vecmarker = geospatial.gps_to_vector(shared_data.pos_uav, shared_data.pos_marker)
         except:
             vecmarker = geospatial.PosVector(0,0,0)
-        #posmgrs = geospatial.latlon_to_mgrs(shared_data.pos_uav)
+
         self.distance_to_home_label.setText(f"Home: {round(vechome.dist)} m")
         self.distance_to_marker_label.setText(f"Marker: {round(vecmarker.dist)} m")
         self.gps_label.setText(f"GPS: {shared_data.pos_uav.lat:.8f}, {shared_data.pos_uav.lon:.8f}")
-        #self.mgrs_label.setText(f"MGRS: {posmgrs}")
 
         if (time.time() - shared_data.last_time_telemetry) > 3:
             shared_data.telemetry_lost = True
