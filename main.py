@@ -36,6 +36,8 @@ class App(QWidget):
         self.flight_data_container_widget = None
         self.terminal_container_widget = None
         self.zoom_factor = 1.0
+        self.warnstyle_off = "background-color: black; color: white; font-size: 20px; border: 3px white; font-weight: bold;"
+        self.warnstyle_on = "background-color: red; color: black; font-size: 20px; border-width: 2px; border-color: black; font-weight: bold;"
 
         self.initUI()
 
@@ -173,22 +175,39 @@ class App(QWidget):
         critical_info_layout.addWidget(self.ci_lq_label)
 
         critical_info_widget = QWidget()
-        critical_info_widget.setStyleSheet("font-size: 20px; font-weight: bold;")
+        critical_info_widget.setStyleSheet(self.warnstyle_off)
         critical_info_widget.setLayout(critical_info_layout)
         critical_info_widget.setFixedHeight(40)
 
         return critical_info_widget
 
+    def setup_status_label(self):
+        status_label = QHBoxLayout()
+
+        self.status_mode = QLabel("NO MODE SET", self)
+        self.status_mode.setAlignment(Qt.AlignCenter)
+        self.ctrl_mode = QLabel("RX DIRECT", self)
+        self.ctrl_mode.setAlignment(Qt.AlignCenter)
+
+        status_label.addWidget(self.status_mode)
+        status_label.addSpacing(10)
+        status_label.addWidget(self.ctrl_mode)
+
+        status_widget = QWidget()
+        status_widget.setStyleSheet("font-size: 20px; font-weight: bold;")
+        status_widget.setLayout(status_label)
+        status_widget.setStyleSheet(self.warnstyle_off)
+        status_widget.setFixedHeight(40)
+
+        return status_widget
+
 
     def setup_flight_data(self):
         flight_data_splitter = QSplitter(Qt.Vertical)
         flight_data_splitter.setStyleSheet("QSplitter::handle { background-color: grey; }")
-
-        self.status_label = QLabel("NO MODE SET", self)
-        self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
-        self.status_label.setFixedHeight(50)
-        flight_data_splitter.addWidget(self.status_label)
+        
+        self.status_widget = self.setup_status_label()
+        flight_data_splitter.addWidget(self.status_widget)
 
         self.critical_info_widget = self.setup_critical_info()
         flight_data_splitter.addWidget(self.critical_info_widget)
@@ -231,6 +250,7 @@ class App(QWidget):
         flight_data_layout.addWidget(self.hdg_label)
         flight_data_layout.addWidget(self.rssi_label)
         flight_data_layout.addWidget(self.lq_label)
+        flight_data_layout.addWidget(self.sats_label)
         flight_data_layout.addWidget(self.vbat_label)
         flight_data_layout.addWidget(self.cur_label)
         flight_data_layout.addWidget(self.pct_label)
@@ -250,9 +270,9 @@ class App(QWidget):
         self.warn_ind_lq = QLabel("LQ")
         self.warn_ind_rssi = QLabel("RSSI")
 
-        self.warn_ind_vbat.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
-        self.warn_ind_lq.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
-        self.warn_ind_rssi.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
+        self.warn_ind_vbat.setStyleSheet(self.warnstyle_off)
+        self.warn_ind_lq.setStyleSheet(self.warnstyle_off)
+        self.warn_ind_rssi.setStyleSheet(self.warnstyle_off)
         self.warn_ind_vbat.setAlignment(Qt.AlignCenter)
         self.warn_ind_lq.setAlignment(Qt.AlignCenter)
         self.warn_ind_rssi.setAlignment(Qt.AlignCenter)
@@ -263,32 +283,31 @@ class App(QWidget):
         warning_panel1.addSpacing(10)
         warning_panel1.addWidget(self.warn_ind_rssi)
 
-        # Second row
-        #warning_panel2 = QHBoxLayout()
-        #self.placeholder1 = QLabel("PLACEHOLDER 1")
-        #self.placeholder2 = QLabel("PLACEHOLDER 2")
-        #self.placeholder3 = QLabel("PLACEHOLDER 3")
+        warning_panel2 = QHBoxLayout()
+        self.warn_ind_tele = QLabel("TELE")
+        self.warn_ind_sensor = QLabel("SENSOR")
+        self.warn_ind_gps = QLabel("GPS")
 
-        #self.placeholder1.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
-        #self.placeholder2.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
-        #self.placeholder3.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
-        #self.placeholder1.setAlignment(Qt.AlignCenter)
-        #self.placeholder2.setAlignment(Qt.AlignCenter)
-        #self.placeholder3.setAlignment(Qt.AlignCenter)
+        self.warn_ind_tele.setStyleSheet(self.warnstyle_off)
+        self.warn_ind_sensor.setStyleSheet(self.warnstyle_off)
+        self.warn_ind_gps.setStyleSheet(self.warnstyle_off)
+        self.warn_ind_tele.setAlignment(Qt.AlignCenter)
+        self.warn_ind_sensor.setAlignment(Qt.AlignCenter)
+        self.warn_ind_gps.setAlignment(Qt.AlignCenter)
         
-        #warning_panel2.addWidget(self.placeholder1)
-        #warning_panel2.addSpacing(10)
-        #warning_panel2.addWidget(self.placeholder2)
-        #warning_panel2.addSpacing(10)
-        #warning_panel2.addWidget(self.placeholder3)
+        warning_panel2.addWidget(self.warn_ind_tele)
+        warning_panel2.addSpacing(10)
+        warning_panel2.addWidget(self.warn_ind_sensor)
+        warning_panel2.addSpacing(10)
+        warning_panel2.addWidget(self.warn_ind_gps)
 
         # Add both rows to the main panel
         main_panel.addLayout(warning_panel1)
-        #main_panel.addSpacing(10)
-        #main_panel.addLayout(warning_panel2)
+        main_panel.addSpacing(10)
+        main_panel.addLayout(warning_panel2)
 
         warning_panel_widget = QWidget()
-        warning_panel_widget.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
+        warning_panel_widget.setStyleSheet(self.warnstyle_off)
         warning_panel_widget.setLayout(main_panel)
         return warning_panel_widget
 
@@ -297,6 +316,12 @@ class App(QWidget):
         for i in range(3):
             btn = QPushButton(f'Button {i+1}', self)
             flight_data_buttons_layout.addWidget(btn)
+
+
+        self.btn_msp_override = QPushButton('MSP Override', self)
+        #self.btn_msp_override.clicked.connect(self.toggle_video_trackzoom)
+        flight_data_buttons_layout.addWidget(self.btn_msp_override)
+
         flight_data_buttons_widget = QWidget()
         flight_data_buttons_widget.setLayout(flight_data_buttons_layout)
         flight_data_buttons_widget.setFixedHeight(40)
@@ -338,11 +363,23 @@ class App(QWidget):
 
     def setup_video_buttons(self):
         video_buttons_layout = QHBoxLayout()
-        for i in range(3):
+        for i in range(2):
             btn = QPushButton(f'Button {i+1}', self)
             video_buttons_layout.addWidget(btn)
 
-        self.btn_video_trackzoom = QPushButton('Track zoom', self)
+        self.btn_video_source1 = QPushButton('Cam 1', self)
+        self.btn_video_source1.clicked.connect(self.set_video_source1)
+        video_buttons_layout.addWidget(self.btn_video_source1)
+
+        self.btn_video_source2 = QPushButton('Cam 2', self)
+        self.btn_video_source2.clicked.connect(self.set_video_source2)
+        video_buttons_layout.addWidget(self.btn_video_source2)
+
+        self.btn_video_zoom = QPushButton('Zoom', self)
+        self.btn_video_zoom.clicked.connect(self.toggle_video_trackzoom)
+        video_buttons_layout.addWidget(self.btn_video_zoom)
+
+        self.btn_video_trackzoom = QPushButton('Track', self)
         self.btn_video_trackzoom.clicked.connect(self.toggle_video_trackzoom)
         video_buttons_layout.addWidget(self.btn_video_trackzoom)
 
@@ -423,6 +460,12 @@ class App(QWidget):
     def handle_zoom_change(self, zoom_factor):
         self.zoom_factor = zoom_factor
 
+    
+    def set_video_source1(self):
+        pass
+    def set_video_source2(self):
+        pass
+
     def process_command(self):
         command = self.terminal_input.text()
         self.terminal_output.append(f'Command: {command}')
@@ -461,9 +504,17 @@ class App(QWidget):
         else:
             self.btn_view_lock.setStyleSheet('')
 
+    def play_alarm(self):
+        pass
+
     @pyqtSlot()
     def update_flight_data(self):
-        #print(shared_data.latitude, shared_data.longitude)
+        vbat = shared_data.vbat
+        cellv = vbat/shared_data.scells
+        gps = shared_data.pos_uav
+        lq = shared_data.lq
+
+        # Set pfd info
         self.speed_label.setText(f"Speed: {shared_data.gspd:.2f}")
         self.altitude_label.setText(f"Altitude: {shared_data.pos_uav.alt:.2f}")
         self.pitch_label.setText(f"Pitch: {math.degrees(shared_data.pitch):.2f}")
@@ -471,48 +522,68 @@ class App(QWidget):
         self.yaw_label.setText(f"Yaw: {shared_data.yaw:.2f}")
         self.hdg_label.setText(f"Heading: {shared_data.hdg:.2f}")
         self.rssi_label.setText(f"RSSI: {shared_data.rssi1:.2f}")
-        self.lq_label.setText(f"LQ: {shared_data.lq}")
+        self.lq_label.setText(f"LQ: {lq}")
         self.sats_label.setText(f"Sats: {shared_data.sats}")
-        self.vbat_label.setText(f"VBAT: {shared_data.vbat:.2f}")
+        self.vbat_label.setText(f"VBAT: {vbat:.2f}")
         self.cur_label.setText(f"CUR: {shared_data.curr}")
         self.pct_label.setText(f"BAT %: {shared_data.pct}")
         self.mah_label.setText(f"BAT mAh: {shared_data.mah}")
         self.tt_label.setText(f"TELE sec: {round(time.time() - shared_data.last_time_telemetry,1)}")
 
-        self.ci_vbat_label.setText(f"BAT {shared_data.vbat:.2f} V")
-        self.ci_vcell_label.setText(f"CELL {(shared_data.vbat/shared_data.scells):.2f} V")
-        self.ci_rssi_label.setText(f"RSSI {shared_data.rssi1:.1f}")
-        self.ci_lq_label.setText(f"LQ {shared_data.lq}")
-
         self.horizon_indicator.update_horizon()
 
+        # set map info
         try:
-            vechome = geospatial.gps_to_vector(shared_data.pos_uav, shared_data.pos_home)
+            vechome = geospatial.gps_to_vector(gps, shared_data.pos_home)
         except:
             vechome = geospatial.PosVector(0,0,0)
         try:
-            vecmarker = geospatial.gps_to_vector(shared_data.pos_uav, shared_data.pos_marker)
+            vecmarker = geospatial.gps_to_vector(gps, shared_data.pos_marker)
         except:
             vecmarker = geospatial.PosVector(0,0,0)
 
         self.distance_to_home_label.setText(f"Home: {round(vechome.dist)} m")
         self.distance_to_marker_label.setText(f"Marker: {round(vecmarker.dist)} m")
-        self.gps_label.setText(f"GPS: {shared_data.pos_uav.lat:.8f}, {shared_data.pos_uav.lon:.8f}")
+        self.gps_label.setText(f"GPS: {gps.lat:.8f}, {gps.lon:.8f}")
 
+        # set status info
         if (time.time() - shared_data.last_time_telemetry) > 3:
             shared_data.telemetry_lost = True
         else:
             shared_data.telemetry_lost = False
 
-        if shared_data.telemetry_lost:
-            self.status_label.setText("TELEMETRY LOST")
-        else:
-            self.status_label.setText(f"MODE {shared_data.flightmode}")
-
         if shared_data.error or shared_data.telemetry_lost:
-            self.status_label.setStyleSheet("background-color: red; color: black; font-size: 20px; font-weight: bold;")
+            self.status_mode.setText("TELEMETRY LOST")
+            self.status_mode.setStyleSheet(self.warnstyle_on)
         else:
-            self.status_label.setStyleSheet("background-color: black; color: white; font-size: 20px; font-weight: bold;")
+            self.status_mode.setText(f"MODE {shared_data.flightmode}")
+            self.status_mode.setStyleSheet(self.warnstyle_off)
+
+        # set critical info
+        self.ci_vbat_label.setText(f"BAT {vbat:.2f} V")
+        self.ci_vcell_label.setText(f"CELL {cellv:.2f} V")
+        self.ci_rssi_label.setText(f"RSSI {shared_data.rssi1:.1f}")
+        self.ci_lq_label.setText(f"LQ {lq}")
+
+        if shared_data.vbat <= shared_data.warn_vbat: 
+            self.ci_vbat_label.setStyleSheet(self.warnstyle_on)
+            self.ci_vcell_label.setStyleSheet(self.warnstyle_on)
+        else:
+            self.ci_vbat_label.setStyleSheet(self.warnstyle_off)
+            self.ci_vcell_label.setStyleSheet(self.warnstyle_off)
+        
+        if shared_data.rssi1 < shared_data.warn_rssi:
+            self.ci_rssi_label.setStyleSheet(self.warnstyle_on)
+        else:
+            self.ci_rssi_label.setStyleSheet(self.warnstyle_off)
+        
+        if lq < shared_data.warn_lq:
+            self.ci_lq_label.setStyleSheet(self.warnstyle_on)
+        else:
+            self.ci_lq_label.setStyleSheet(self.warnstyle_off)
+
+
+        # Warning indicators
 
 
 if __name__ == '__main__':

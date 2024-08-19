@@ -39,7 +39,7 @@ def update_marker():
     response = {
         'latitude': lat,
         'longitude': lon,
-        'yaw': shared_data.yaw,
+        'yaw': shared_data.hdg,
         'user_latitude': user_lat,
         'user_longitude': user_lon,
         'user_active': user_active,

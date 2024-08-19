@@ -137,9 +137,10 @@ def handleCrsfPacket(ptype, data):
         shared_data.gspd = int.from_bytes(data[11:13], byteorder='big', signed=True) / 36.0
         shared_data.hdg =  int.from_bytes(data[13:15], byteorder='big', signed=True) / 100.0
         shared_data.pos_uav.alt = int.from_bytes(data[15:17], byteorder='big', signed=True) - 1000
+        shared_data.log_pos.append(shared_data.pos_uav)
         shared_data.sats = data[17]
         shared_data.last_time_telemetry = time.time()
-        if shared_data.printtele: print(f"GPS: Pos={shared_data.latitude} {shared_data.longitude} GSpd={shared_data.gspd:0.1f}m/s Hdg={shared_data.hdg:0.1f} Alt={shared_data.alt}m Sats={shared_data.sats}")
+        if shared_data.printtele: print(f"GPS: Pos={shared_data.pos_uav.lat} {shared_data.pos_uav.lon} GSpd={shared_data.gspd:0.1f}m/s Hdg={shared_data.hdg:0.1f} Alt={shared_data.pos_uav.alt}m Sats={shared_data.sats}")
 
     elif ptype == PacketsTypes.VARIO:
         shared_data.vspd = int.from_bytes(data[3:5], byteorder='big', signed=True) / 10.0
@@ -163,6 +164,8 @@ def crsf_telemetry(app):
             if ser.in_waiting > 0:
                 input_buffer.extend(ser.read(ser.in_waiting))
             else:
+                #if args.tx:
+                #    ser.write(channelsCrsfToChannelsPacket([992 for ch in range(16)]))
                 time.sleep(0.020)
 
             while len(input_buffer) > 2:

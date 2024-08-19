@@ -48,3 +48,6 @@ MGRS
 ## Primary Flight Display:
 
 
+## idk
+Mode: MONITOR (receive only), CONTROL (2-way control)
+uav control: RX DIRECT, DATALINK

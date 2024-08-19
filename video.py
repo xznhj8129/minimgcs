@@ -143,27 +143,38 @@ def update_video_stream(app):
             zoom_level = max(1.5, shared_data.video_track_zoom_level)
             x, y = shared_data.video_track_x, shared_data.video_track_y
             zoom_w, zoom_h = int(app.video_label.width() / zoom_level), int(app.video_label.height() / zoom_level)
-            x1, y1 = max(0, int(x - zoom_w // 2)), max(0, int(y - zoom_h // 2))
-            x2, y2 = min(original_width, int(x + zoom_w // 2)), min(original_height, int(y + zoom_h // 2))
+            x1, y1 = max(0, int(x - (zoom_w // 2))), max(0, int(y - (zoom_h // 2)))
+            x2, y2 = min(original_width, int(x + (zoom_w // 2))), min(original_height, int(y + (zoom_h // 2)))
+
+            #print('\n##################')
+            #print('scaled', scaled_width, scaled_height)
+            #print('zoom', zoom_w, zoom_h)
+            #print('y1, y2', y1, y2)
+
             if (x2 - x1) < zoom_w:
-                if x < (label_width / 2):
-                    x2 += zoom_w - (x2 - x1)
+                if x < original_width / 2:
+                    x2 = min(original_width, x2 + (zoom_w - (x2 - x1)))
                 else:
-                    x1 -= zoom_w - (x2 - x1)
+                    x1 = max(0, x1 - (zoom_w - (x2 - x1)))
 
             if (y2 - y1) < zoom_h:
-                if y < (label_height / 2):
-                    y2 += zoom_h - (y2 - y1)
+                if y < original_height / 2:
+                    y2 = min(original_height, y2 + (zoom_h - (y2 - y1)))
                 else:
-                    y1 -= zoom_h - (y2 - y1)
+                    y1 = max(0, y1 - (zoom_h - (y2 - y1)))
 
+            #print('y1, y2', y1, y2)
             cropped_frame = frame[y1:y2, x1:x2]
             cropped_frame_h, cropped_frame_w = cropped_frame.shape[:2]
+            #print('crop', cropped_frame_w, cropped_frame_h)
+            #print('labelsize', app.video_label.width(), app.video_label.height())
 
             if cropped_frame_h > cropped_frame_w:
                 resized_frame, dim = image_resize(cropped_frame, height=app.video_label.height())
             else:
                 resized_frame, dim = image_resize(cropped_frame, width=app.video_label.width())
+            
+
             frame = crop_center(resized_frame, app.video_label.width(), app.video_label.height())
             resized_height, resized_width = frame.shape[:2]
 
